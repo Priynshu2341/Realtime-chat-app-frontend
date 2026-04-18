@@ -1,136 +1,245 @@
-import { useEffect, useRef, useState } from "react";
-import { getChats, getMessages } from "../../api/chatAndMsgApi";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getChats, getMessages,markChatAsRead, } from "../../api/chatAndMsgApi";
 import "../../styles/chat-page.css";
 import { useAuth } from "../../auth/AuthContext";
 import { useNavigate } from "react-router";
 import {
   connectWebsocket,
   subscribeToChat,
+  subscribeToChatMessages,
   sendMessageToUser,
+  
 } from "../../api/websocket";
 
 export function ChatPage() {
-  const [selectedChatId, setSelectedChatId] = useState(null);
   const [selectedChat, setSelectedChat] = useState(null);
   const [chats, setChats] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [messageError, setMessageError] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
 
   const { accessToken, loggedInUserId } = useAuth();
   const navigate = useNavigate();
+
+  const chatRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const isProgrammaticScroll = useRef(false);
+  const prevScrollHeightRef = useRef(null);
+  const isPaginating = useRef(false);
 
-  const currentUserId = loggedInUserId != null ? Number(loggedInUserId) : null;
-  console.log("currentsuerid",currentUserId);
+  const currentUserId = Number(loggedInUserId);
 
-  
-  async function fetchMessages(chat) {
+  // ================= FETCH INITIAL =================
+  const fetchMessages = async (chat) => {
     if (!chat) return;
-    const chatKey = chat.chatKey;
-    try {
-      const res = await getMessages({ chatKey });
-      setMessages(res);
-    } catch (e) {
-      setMessageError(
-        e?.response?.data?.message || e?.message || "Failed to load Messages"
-      );
-    }
-  }
+    const res = await getMessages({ chatKey: chat.chatKey });
+    setMessages(res.content);
+    setCursor(res.nextCursor);
+    setHasMore(res.hasMore);
 
+    isProgrammaticScroll.current = true;
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+      setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 150);
+    });
+  };
+
+  // ================= SCROLL HANDLER =================
+  const handleScroll = async (e) => {
+    const container = e.target;
+
+    if (isProgrammaticScroll.current) return;
+    if (isPaginating.current) return;
+    if (container.scrollHeight <= container.clientHeight) return;
+    if (container.scrollTop > 50) return;
+    if (!hasMore || !cursor || !selectedChat) return;
+    if (loadingMore) return;
+
+    isPaginating.current = true;
+    setLoadingMore(true);
+
+    // snapshot BEFORE state change
+    prevScrollHeightRef.current = container.scrollHeight;
+
+    try {
+      const res = await getMessages({
+        chatKey: selectedChat.chatKey,
+        cursorTime: cursor.createdAt,
+        cursorId: cursor.id,
+      });
+
+      if (!res.content || res.content.length === 0) {
+        setHasMore(false);
+        prevScrollHeightRef.current = null;
+        isPaginating.current = false;
+        return;
+      }
+
+      setMessages((prev) => {
+        const existing = new Set(prev.map((m) => m.id));
+        const newMsgs = res.content.filter((m) => !existing.has(m.id));
+        if (newMsgs.length === 0) {
+          prevScrollHeightRef.current = null;
+          isPaginating.current = false;
+          return prev;
+        }
+        return [...newMsgs, ...prev];
+      });
+
+      setCursor(res.nextCursor);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.error("Pagination error", err);
+      prevScrollHeightRef.current = null;
+      isPaginating.current = false;
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // ================= SCROLL RESTORE =================
+  // Fires synchronously after DOM update, before browser paints — zero visible jump
+  useLayoutEffect(() => {
+    const container = chatRef.current;
+    if (!container || prevScrollHeightRef.current === null) return;
+
+    // new total height minus old total height = height added by prepended messages
+    container.scrollTop = container.scrollHeight - prevScrollHeightRef.current;
+
+    prevScrollHeightRef.current = null;
+    isPaginating.current = false;
+  }, [messages]);
+
+  // ================= CONNECT WS =================
   useEffect(() => {
     if (!accessToken) {
       navigate("/login");
       return;
     }
-
-    connectWebsocket(() => {
-      console.log("WebSocket Ready");
-      setIsConnected(true);
-    }, accessToken);
+    connectWebsocket(() => setIsConnected(true), accessToken);
   }, [accessToken, navigate]);
 
+  // ================= LOAD CHATS =================
   useEffect(() => {
-    const fetchChats = async () => {
-      try {
-        const chatData = await getChats();
-        setChats(chatData);
-
-        if (chatData.length > 0) {
-          const firstChat = chatData[0];
-          setSelectedChat(firstChat);
-          setSelectedChatId(firstChat.chatId);
-          fetchMessages(firstChat);
-        }
-      } catch (e) {
-        setMessageError(
-          e?.response?.data?.message || e?.message || "Failed to load chats"
-        );
+    const loadChats = async () => {
+      const data = await getChats();
+      setChats(data);
+      
+      if (data.length > 0) {
+        const first = data[0];
+        setSelectedChat(first);
+        fetchMessages(first);
       }
     };
-
-    fetchChats();
+    loadChats();
   }, []);
 
+
   useEffect(() => {
-    if (!selectedChatId || !isConnected) return;
+  if (!isConnected) return;
 
-    console.log("📡 Subscribing to:", selectedChatId);
+  const sub = subscribeToChat((msg) => {
+    console.log("received msg",msg)
+    setChats((prev) => {
+      const updated = prev.map((chat) => {
+        if (chat.chatId === msg.chatId) {
+          return {
+            ...chat,
+            lastMessage: msg.content,
+            createdAt: msg.createdAt,
+          };
+        }
+        
+        return chat;
+      });
 
-    const subscription = subscribeToChat(selectedChatId, (message) => {
-      console.log("Received:", message);
-      setMessages((prev) => [...prev, message]);
+      const target = updated.find((c) => c.chatId === msg.chatId);
+      const rest = updated.filter((c) => c.chatId !== msg.chatId);
+
+      if (!target) return prev;
+
+      return [target, ...rest];
+    });
+  });
+
+  return () => sub?.unsubscribe();
+}, [isConnected]);
+
+  // ================= WS SUBSCRIBE =================
+  useEffect(() => {
+    if (!selectedChat || !isConnected) return;
+    const subChatMessages = subscribeToChatMessages(selectedChat.chatId, (msg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
     });
 
-    return () => {
-      console.log("Unsubscribing from:", selectedChatId);
-      subscription?.unsubscribe();
-    };
-  }, [selectedChatId, isConnected]);
+    return () =>  subChatMessages?.unsubscribe();
+      
+    
+  }, [selectedChat, isConnected]);
 
+  // ================= AUTO SCROLL for new messages only =================
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const container = chatRef.current;
+    if (!container) return;
+    // never auto-scroll during pagination
+    if (isPaginating.current || prevScrollHeightRef.current !== null) return;
+    if (loadingMore) return;
 
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop <= container.clientHeight + 80;
+
+    if (isNearBottom) {
+      isProgrammaticScroll.current = true;
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+      setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 150);
+    }
+  }, [messages, loadingMore]);
+
+
+  // ================= SWITCH CHAT =================
   const handleSelectChat = (chat) => {
+    const chatId = chat.chatId;
+    if (selectedChat?.chatId === chatId) return;
     setSelectedChat(chat);
-    setSelectedChatId(chat.chatId);
+    markChatAsRead({chatId})
+    setMessages([]);
+    setCursor(null);
+    setHasMore(true);
+    prevScrollHeightRef.current = null;
+    isPaginating.current = false;
     fetchMessages(chat);
-    setMessageError("");
   };
 
+  // ================= SEND =================
   const handleSendMessage = () => {
-    const trimmed = newMessage.trim();
-    if (!trimmed || !selectedChatId) return;
-
-    sendMessageToUser({
-      receiverId: selectedChat.otherUserId,
-      content: trimmed,
-    });
-
+    const msg = newMessage.trim();
+    if (!msg || !selectedChat) return;
+    sendMessageToUser({ receiverId: selectedChat.otherUserId, content: msg });
     setNewMessage("");
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const isMessageSentByMe = (msg) => {
-    const senderId = msg.senderId;
-    console.log("senderId",senderId);
-    const result = Number(senderId) === Number(currentUserId);
-    return result;
-  };
+  const isMine = (msg) => Number(msg.senderId) === currentUserId;
 
   return (
     <div className="chat-page">
       <div className="chat-sidebar">
-        <div className="chat-sidebar-header">Chats</div>
-
         {chats.map((chat) => (
           <div
             key={chat.chatId}
@@ -138,15 +247,18 @@ export function ChatPage() {
               selectedChat?.chatId === chat.chatId ? "active" : ""
             }`}
             onClick={() => handleSelectChat(chat)}
-          >
-            <div className="chat-avatar">
-              {chat?.otherUserName?.charAt(0)?.toUpperCase() || "U"}
-            </div>
-
-            <div className="chat-info">
-              <h4>{chat?.otherUserName}</h4>
-              <p>{chat?.lastMessage}</p>
-            </div>
+          
+          > 
+          <div className="chat-info">
+            <div  className="main-info">
+            <h4 className="username-text">{chat.otherUserName}</h4>
+            <h3 className={chat.unRead === 0 ? "unread-text-disabled" :
+                 "unread-text-enabled"
+            }>{`(${chat.unRead}) New`}</h3>
+          </div>
+            <p>{chat.lastMessage}</p>
+          </div>
+            
           </div>
         ))}
       </div>
@@ -155,50 +267,42 @@ export function ChatPage() {
         {selectedChat ? (
           <>
             <div className="chat-main-header">
-              <div className="chat-avatar">
-                {selectedChat?.otherUserName?.charAt(0)?.toUpperCase()}
-              </div>
-              <h3>{selectedChat?.otherUserName}</h3>
+              <h3>{selectedChat.otherUserName}</h3>
             </div>
 
-            <div className="chat-messages">
-              {messageError && (
-                <div className="chat-error">{messageError}</div>
+            <div
+              className="chat-messages"
+              onScroll={handleScroll}
+              ref={chatRef}
+            >
+              {loadingMore && (
+                <div className="loading-older">Loading older messages...</div>
               )}
 
-              {messages.length > 0 ? (
-                messages.map((msg) => {
-                  const isSent = isMessageSentByMe(msg);
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`message ${isSent ? "sent" : "received"}`}
-                    >
-                      <p>{msg.content}</p>
-                      <small>{new Date(msg.createdAt).toLocaleString()}</small>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="chat-empty">No messages</div>
-              )}
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message ${isMine(msg) ? "sent" : "received"}`}
+                >
+                  <p>{msg.content}</p>
+                </div>
+              ))}
 
               <div ref={messagesEndRef} />
             </div>
 
             <div className="message-input-div">
               <input
-                type="text"
-                placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
+                placeholder="Type a message..."
               />
               <button onClick={handleSendMessage}>Send</button>
             </div>
           </>
         ) : (
-          <div className="chat-empty">Select a chat to start messaging</div>
+          <div className="chat-empty">Select a conversation</div>
         )}
       </div>
     </div>

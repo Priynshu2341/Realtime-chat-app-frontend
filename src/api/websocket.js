@@ -21,7 +21,7 @@ export const connectWebsocket = (onConnected,accessToken) => {
 
     onConnect: () => {
       console.log("✅ Connected To WebSocket");
-      if (onConnected) onConnected(); // important
+      if (onConnected) onConnected(); 
     },
 
     onStompError: (e) => {
@@ -36,7 +36,7 @@ export const connectWebsocket = (onConnected,accessToken) => {
   stompClient.activate();
 };
 
-export const subscribeToChat = (chatId, onMessageReceived) => {
+export const subscribeToChatMessages = (chatId, onMessageReceived) => {
   if (!stompClient || !stompClient.connected) {
     console.warn("⚠️ Tried to subscribe before connection");
     return;
@@ -47,6 +47,22 @@ export const subscribeToChat = (chatId, onMessageReceived) => {
     onMessageReceived(body);
   });
 };
+
+export const subscribeToChat = (onMessageReceived) => {
+
+   if (!stompClient || !stompClient.connected) {
+    console.warn("⚠️ Tried to subscribe before connection");
+    return;
+  }
+  
+
+
+  return stompClient.subscribe("/user/queue/chats",(message) => {
+    const body = JSON.parse(message.body);
+    console.log(body);
+    onMessageReceived(body);
+  });
+}
 
 export const sendMessageToUser = (data) => {
   if (!stompClient || !stompClient.connected) {
