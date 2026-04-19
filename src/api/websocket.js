@@ -81,3 +81,31 @@ export const disconnectWebsocket = () => {
     stompClient.deactivate();
   }
 };
+
+
+export const subscribeToMessageStatusUpdates = (onMessageReceived) => {
+   if (!stompClient || !stompClient.connected) {
+    console.warn("⚠️ Tried to subscribe before connection");
+    return;
+   }
+
+    return stompClient.subscribe("/user/queue/status",(message) => {
+      const body = JSON.parse(message.body);
+      console.log(body);
+      onMessageReceived(body);
+
+    })
+  
+
+}
+
+export const subscribeToMessageRefreshUpdate = (onMessageReceived) => {
+  if(!stompClient || !stompClient.connected){
+    console.warn("⚠️ Tried to subscribe before connection");
+    return;
+  }
+  return stompClient.subscribe("/user/queue/refresh",(msg) => {
+    const body = JSON.parse(msg.body);
+    onMessageReceived(body);
+  })
+}

@@ -1,15 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getChats, getMessages,markChatAsRead, } from "../../api/chatAndMsgApi";
+import { getChats, getMessages, markChatAsRead } from "../../api/chatAndMsgApi";
 import "../../styles/chat-page.css";
 import { useAuth } from "../../auth/AuthContext";
 import { useNavigate } from "react-router";
+import {Check,CheckCheck} from "lucide-react";
 import {
   connectWebsocket,
   subscribeToChat,
   subscribeToChatMessages,
   sendMessageToUser,
-  
+  subscribeToMessageStatusUpdates,
+  subscribeToMessageRefreshUpdate
 } from "../../api/websocket";
+
 
 export function ChatPage() {
   const [selectedChat, setSelectedChat] = useState(null);
@@ -31,11 +34,14 @@ export function ChatPage() {
   const isPaginating = useRef(false);
 
   const currentUserId = Number(loggedInUserId);
+  console.log(messages);
 
-  // ================= FETCH INITIAL =================
+
   const fetchMessages = async (chat) => {
     if (!chat) return;
+
     const res = await getMessages({ chatKey: chat.chatKey });
+
     setMessages(res.content);
     setCursor(res.nextCursor);
     setHasMore(res.hasMore);
@@ -49,7 +55,7 @@ export function ChatPage() {
     });
   };
 
-  // ================= SCROLL HANDLER =================
+
   const handleScroll = async (e) => {
     const container = e.target;
 
@@ -63,7 +69,6 @@ export function ChatPage() {
     isPaginating.current = true;
     setLoadingMore(true);
 
-    // snapshot BEFORE state change
     prevScrollHeightRef.current = container.scrollHeight;
 
     try {
@@ -73,49 +78,33 @@ export function ChatPage() {
         cursorId: cursor.id,
       });
 
-      if (!res.content || res.content.length === 0) {
-        setHasMore(false);
-        prevScrollHeightRef.current = null;
-        isPaginating.current = false;
-        return;
-      }
-
       setMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
         const newMsgs = res.content.filter((m) => !existing.has(m.id));
-        if (newMsgs.length === 0) {
-          prevScrollHeightRef.current = null;
-          isPaginating.current = false;
-          return prev;
-        }
+        if (newMsgs.length === 0) return prev;
         return [...newMsgs, ...prev];
       });
 
       setCursor(res.nextCursor);
       setHasMore(res.hasMore);
-    } catch (err) {
-      console.error("Pagination error", err);
-      prevScrollHeightRef.current = null;
-      isPaginating.current = false;
     } finally {
       setLoadingMore(false);
     }
   };
 
-  // ================= SCROLL RESTORE =================
-  // Fires synchronously after DOM update, before browser paints — zero visible jump
+
   useLayoutEffect(() => {
     const container = chatRef.current;
     if (!container || prevScrollHeightRef.current === null) return;
 
-    // new total height minus old total height = height added by prepended messages
-    container.scrollTop = container.scrollHeight - prevScrollHeightRef.current;
+    container.scrollTop =
+      container.scrollHeight - prevScrollHeightRef.current;
 
     prevScrollHeightRef.current = null;
     isPaginating.current = false;
   }, [messages]);
 
-  // ================= CONNECT WS =================
+
   useEffect(() => {
     if (!accessToken) {
       navigate("/login");
@@ -124,77 +113,99 @@ export function ChatPage() {
     connectWebsocket(() => setIsConnected(true), accessToken);
   }, [accessToken, navigate]);
 
-  // ================= LOAD CHATS =================
-  useEffect(() => {
+  
+  useEffect(() => { 
     const loadChats = async () => {
       const data = await getChats();
       setChats(data);
-      
+
       if (data.length > 0) {
-        const first = data[0];
-        setSelectedChat(first);
-        fetchMessages(first);
+        setSelectedChat(data[0]);
+        fetchMessages(data[0]);
       }
     };
+
     loadChats();
-  }, []);
+    if(!isConnected) return;
 
+   const sub = subscribeToMessageRefreshUpdate((msg) => {
+    
+      setMessages(prev => {
+        prev.map(m => {
+          msg.includes(m.id) ? {
+            ...m,
+            messageStatus: "SEEN"
+          } : m
+        })
+        
+      })
+    })
 
+    return(() => sub?.unsubscribe() )
+  }, [isConnected,messages]);
+
+  
   useEffect(() => {
-  if (!isConnected) return;
+    if (!isConnected) return;
 
-  const sub = subscribeToChat((msg) => {
-    console.log("received msg",msg)
-    setChats((prev) => {
-      const updated = prev.map((chat) => {
-        if (chat.chatId === msg.chatId) {
+    const sub = subscribeToChat((msg) => {
+      setChats((prev) => {
+        const updated = prev.map((chat) => {
+          if (chat.chatId !== msg.chatId) return chat;
+
+          const isOpen =
+            selectedChat && msg.chatId === selectedChat.chatId;
+
           return {
             ...chat,
             lastMessage: msg.content,
             createdAt: msg.createdAt,
+            unread: isOpen ? 0 : (chat.unread || 0) + 1,
           };
-        }
-        
-        return chat;
+        });
+
+        const target = updated.find((c) => c.chatId === msg.chatId);
+        const rest = updated.filter((c) => c.chatId !== msg.chatId);
+
+        if (!target) return prev;
+
+        return [target, ...rest];
       });
-
-      const target = updated.find((c) => c.chatId === msg.chatId);
-      const rest = updated.filter((c) => c.chatId !== msg.chatId);
-
-      if (!target) return prev;
-
-      return [target, ...rest];
     });
-  });
 
-  return () => sub?.unsubscribe();
-}, [isConnected]);
+    return () => sub?.unsubscribe();
+  }, [isConnected, selectedChat]);
 
-  // ================= WS SUBSCRIBE =================
+  
   useEffect(() => {
     if (!selectedChat || !isConnected) return;
-    const subChatMessages = subscribeToChatMessages(selectedChat.chatId, (msg) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
-      });
-    });
 
-    return () =>  subChatMessages?.unsubscribe();
-      
-    
+    const sub = subscribeToChatMessages(
+      selectedChat.chatId,
+      (msg) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+
+        markChatAsRead({ chatId: selectedChat.chatId });
+      }
+    );
+
+    return () => sub?.unsubscribe();
   }, [selectedChat, isConnected]);
 
-  // ================= AUTO SCROLL for new messages only =================
+
   useEffect(() => {
     const container = chatRef.current;
     if (!container) return;
-    // never auto-scroll during pagination
-    if (isPaginating.current || prevScrollHeightRef.current !== null) return;
-    if (loadingMore) return;
+
+    if (isPaginating.current || prevScrollHeightRef.current !== null)
+      return;
 
     const isNearBottom =
-      container.scrollHeight - container.scrollTop <= container.clientHeight + 80;
+      container.scrollHeight - container.scrollTop <=
+      container.clientHeight + 80;
 
     if (isNearBottom) {
       isProgrammaticScroll.current = true;
@@ -203,39 +214,79 @@ export function ChatPage() {
         isProgrammaticScroll.current = false;
       }, 150);
     }
-  }, [messages, loadingMore]);
+  }, [messages]);
+
+ 
+  useEffect(() => {
+    if (!isConnected) return; 
+
+    const sub = subscribeToMessageStatusUpdates((msg) => {
+      setMessages((prev) =>
+        prev.map((message) => {  // ✅ FIX 2: return the mapped array
+          if (message.id === msg.messageId) {
+            return {
+              ...message,
+              messageStatus: msg.messageStatus,
+            };
+          }
+          return message;
+        })
+      );
+    });
+
+    return () => sub?.unsubscribe();
+  }, [isConnected]);
 
 
-  // ================= SWITCH CHAT =================
+
+  
   const handleSelectChat = (chat) => {
-    const chatId = chat.chatId;
-    if (selectedChat?.chatId === chatId) return;
+    if (selectedChat?.chatId === chat.chatId) return;
+
     setSelectedChat(chat);
-    markChatAsRead({chatId})
+
+    markChatAsRead({ chatId: chat.chatId });
+
+    setChats((prev) =>
+      prev.map((c) =>
+        c.chatId === chat.chatId ? { ...c, unread: 0 } : c
+      )
+    );
+
     setMessages([]);
     setCursor(null);
     setHasMore(true);
-    prevScrollHeightRef.current = null;
-    isPaginating.current = false;
     fetchMessages(chat);
   };
 
-  // ================= SEND =================
+ 
   const handleSendMessage = () => {
     const msg = newMessage.trim();
     if (!msg || !selectedChat) return;
-    sendMessageToUser({ receiverId: selectedChat.otherUserId, content: msg });
+
+    sendMessageToUser({
+      receiverId: selectedChat.otherUserId,
+      content: msg,
+    });
+
     setNewMessage("");
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
-  const isMine = (msg) => Number(msg.senderId) === currentUserId;
+  const handleMessageStatus = (msg) => {
+      if(msg.messageStatus === "SENT") {
+        return <Check size={16} />
+      }
+       if(msg.messageStatus === "DELIVERED") {
+        return <CheckCheck size={16}  />
+      }
+       if(msg.messageStatus === "SEEN") {
+        return <CheckCheck size={16} color="yellow" />
+      }
+  }
+  
+  const isMine = (msg) =>
+    Number(msg.senderId) === currentUserId;
 
   return (
     <div className="chat-page">
@@ -247,18 +298,16 @@ export function ChatPage() {
               selectedChat?.chatId === chat.chatId ? "active" : ""
             }`}
             onClick={() => handleSelectChat(chat)}
-          
-          > 
-          <div className="chat-info">
-            <div  className="main-info">
-            <h4 className="username-text">{chat.otherUserName}</h4>
-            <h3 className={chat.unRead === 0 ? "unread-text-disabled" :
-                 "unread-text-enabled"
-            }>{`(${chat.unRead}) New`}</h3>
-          </div>
-            <p>{chat.lastMessage}</p>
-          </div>
-            
+          >
+            <div className="chat-info">
+              <div className="main-info">
+                <h4>{chat.otherUserName}</h4>
+                {chat.unread > 0 && (
+                  <span className="badge">{chat.unread}</span>
+                )}
+              </div>
+              <p>{chat.lastMessage}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -275,19 +324,19 @@ export function ChatPage() {
               onScroll={handleScroll}
               ref={chatRef}
             >
-              {loadingMore && (
-                <div className="loading-older">Loading older messages...</div>
-              )}
-
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`message ${isMine(msg) ? "sent" : "received"}`}
+                  className={`message  ${
+                    isMine(msg) ? "sent" : "received"
+                  }`}
                 >
-                  <p>{msg.content}</p>
+                  <div className="message-content">
+                    <span className="content-text" >{msg.content}</span>
+                    {isMine(msg) && handleMessageStatus(msg)}
+                  </div>
                 </div>
               ))}
-
               <div ref={messagesEndRef} />
             </div>
 
@@ -295,14 +344,12 @@ export function ChatPage() {
               <input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
               />
               <button onClick={handleSendMessage}>Send</button>
             </div>
           </>
         ) : (
-          <div className="chat-empty">Select a conversation</div>
+          <div>Select chat</div>
         )}
       </div>
     </div>
