@@ -336,6 +336,12 @@
   gap: 4px;
 }
 
+.message-content .read-icon {
+  color: #FFD700 !important;
+  stroke: #FFD700 !important;
+  fill: #FFD700 !important;
+}
+
 .chat-empty {
   flex: 1;
   display: flex;

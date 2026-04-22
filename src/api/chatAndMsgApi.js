@@ -1,32 +1,74 @@
 import { backendApiSecure } from "../api/axios";
 
-export const getChats = async () => {
-  const response = await backendApiSecure.get("/chats/all");
-  return response.data;
+const handleError = (error, defaultMessage) => {
+  console.error("API Error:", error);
+
+  if (error.response) {
+    return {
+      success: false,
+      message: error.response.data?.message || defaultMessage,
+      status: error.response.status,
+    };
+  }
+
+  return {
+    success: false,
+    message: defaultMessage || "Something went wrong",
+  };
 };
 
-export const getMessages = async ({chatKey,cursorTime,cursorId}) => {
-  let url = `/message/find/${chatKey}`;
-  if(cursorId && cursorTime){
-    url += `?cursorTime=${cursorTime}&cursorId=${cursorId}`;
+export const getChats = async () => {
+  try {
+    const res = await backendApiSecure.get("/chats/all");
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to fetch chats");
   }
-  const response = await backendApiSecure.get(url);
-  return response.data;
+};
+
+export const getMessages = async ({ chatKey, cursorTime, cursorId }) => {
+  try {
+    let url = `/message/find/${chatKey}`;
+
+    if (cursorTime && cursorId) {
+      url += `?cursorTime=${cursorTime}&cursorId=${cursorId}`;
+    }
+
+    const res = await backendApiSecure.get(url);
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to fetch messages");
+  }
 };
 
 export const sendMessage = async ({ receiverId, content }) => {
-  const response = await backendApiSecure.post("/message/send", {
-    receiverId,
-    content,
-  });
-  return response.data;
+  try {
+    const res = await backendApiSecure.post("/message/send", {
+      receiverId,
+      content,
+    });
+
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to send message");
+  }
 };
 
-export const markChatAsRead = async ({chatId}) =>{
-  console.log(chatId)
-  const response = await backendApiSecure.post(`/chats/read/${chatId}`);
-  console.log(response.data)
-  return response.data;
+export const markChatAsRead = async ({ chatId }) => {
+  try {
+    const res = await backendApiSecure.post(`/chats/read/${chatId}`);
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to mark chat as read");
+  }
+};
 
-}
 
+export const markChatAsSeen = async ({ chatId }) => {
+  try {
+    const res = await backendApiSecure.post(`/message/mark/seen/${chatId}`);
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to mark chat as seen");
+  }
+};

@@ -1,27 +1,20 @@
-import "./pollyfills"
+import "./pollyfills";
 import { Client } from "@stomp/stompjs";
-import SockJS from "sockjs-client";
-
-
-
 
 let stompClient = null;
 
-
-export const connectWebsocket = (onConnected,accessToken) => {
-
-
+export const connectWebsocket = (onConnected, accessToken) => {
   stompClient = new Client({
     brokerURL: "ws://localhost:8080/ws",
     reconnectDelay: 5000,
 
     connectHeaders: {
-      Authorization: `Bearer ${accessToken}`
+      Authorization: `Bearer ${accessToken}`,
     },
 
     onConnect: () => {
       console.log("✅ Connected To WebSocket");
-      if (onConnected) onConnected(); 
+      onConnected?.();
     },
 
     onStompError: (e) => {
@@ -30,45 +23,64 @@ export const connectWebsocket = (onConnected,accessToken) => {
 
     onWebSocketError: (e) => {
       console.error("❌ WS Error:", e);
-    }
+    },
   });
 
   stompClient.activate();
 };
 
-export const subscribeToChatMessages = (chatId, onMessageReceived) => {
+const isReady = () => {
   if (!stompClient || !stompClient.connected) {
-    console.warn("⚠️ Tried to subscribe before connection");
-    return;
+    console.warn("⚠️ WebSocket not connected");
+    return false;
   }
+  return true;
+};
 
-  return stompClient.subscribe(`/topic/chat/${chatId}`, (message) => {
-    const body = JSON.parse(message.body);
-    onMessageReceived(body);
+
+export const subscribeToChatMessages = (chatId, cb) => {
+  if (!isReady()) return;
+
+  return stompClient.subscribe(`/topic/chat/${chatId}`, (msg) => {
+    cb(JSON.parse(msg.body));
   });
 };
 
-export const subscribeToChat = (onMessageReceived) => {
+export const subscribeToChat = (cb) => {
+  if (!isReady()) return;
 
-   if (!stompClient || !stompClient.connected) {
-    console.warn("⚠️ Tried to subscribe before connection");
-    return;
-  }
-  
-
-
-  return stompClient.subscribe("/user/queue/chats",(message) => {
-    const body = JSON.parse(message.body);
-    console.log(body);
-    onMessageReceived(body);
+  return stompClient.subscribe("/user/queue/chats", (msg) => {
+    cb(JSON.parse(msg.body));
   });
-}
+};
+
+export const subscribeToMessageStatusUpdates = (cb) => {
+  if (!isReady()) return;
+
+  return stompClient.subscribe("/user/queue/status", (msg) => {
+    cb(JSON.parse(msg.body));
+  });
+};
+
+export const subscribeToMessageRefreshUpdate = (cb) => {
+  if (!isReady()) return;
+
+  return stompClient.subscribe("/user/queue/refresh", (msg) => {
+    cb(JSON.parse(msg.body));
+  });
+};
+
+export const subscribeToMessageSeenUpdate = (cb) => {
+  if (!isReady()) return;
+
+  return stompClient.subscribe("/user/queue/seen", (msg) => {
+    cb(JSON.parse(msg.body));
+  });
+};
+
 
 export const sendMessageToUser = (data) => {
-  if (!stompClient || !stompClient.connected) {
-    console.error("❌ Not Connected");
-    return;
-  }
+  if (!isReady()) return;
 
   stompClient.publish({
     destination: "/app/chat.send",
@@ -76,36 +88,29 @@ export const sendMessageToUser = (data) => {
   });
 };
 
-export const disconnectWebsocket = () => {
-  if (stompClient) {
-    stompClient.deactivate();
-  }
+export const sendOpenChatStatus = (chatId) => {
+  if (!isReady()) return;
+
+  stompClient.publish({
+    destination: "/app/chat.open",
+    body: JSON.stringify({ chatId }),
+  });
+};
+
+export const sendCloseChatStatus = () => {
+  if (!isReady()) return;
+
+  stompClient.publish({
+    destination: "/app/chat.close",
+    body: "", 
+  });
 };
 
 
-export const subscribeToMessageStatusUpdates = (onMessageReceived) => {
-   if (!stompClient || !stompClient.connected) {
-    console.warn("⚠️ Tried to subscribe before connection");
-    return;
-   }
 
-    return stompClient.subscribe("/user/queue/status",(message) => {
-      const body = JSON.parse(message.body);
-      console.log(body);
-      onMessageReceived(body);
-
-    })
-  
-
-}
-
-export const subscribeToMessageRefreshUpdate = (onMessageReceived) => {
-  if(!stompClient || !stompClient.connected){
-    console.warn("⚠️ Tried to subscribe before connection");
-    return;
+export const disconnectWebsocket = () => {
+  if (stompClient) {
+    stompClient.deactivate();
+    stompClient = null;
   }
-  return stompClient.subscribe("/user/queue/refresh",(msg) => {
-    const body = JSON.parse(msg.body);
-    onMessageReceived(body);
-  })
-}
+};
