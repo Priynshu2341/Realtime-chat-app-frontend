@@ -1,11 +1,15 @@
+
+
 import "./pollyfills";
 import { Client } from "@stomp/stompjs";
 
 let stompClient = null;
 
 export const connectWebsocket = (onConnected, accessToken) => {
+
   stompClient = new Client({
     brokerURL: "ws://localhost:8080/ws",
+
     reconnectDelay: 5000,
 
     connectHeaders: {
@@ -22,7 +26,7 @@ export const connectWebsocket = (onConnected, accessToken) => {
     },
 
     onWebSocketError: (e) => {
-      console.error("❌ WS Error:", e);
+      console.error("❌ WebSocket Error:", e);
     },
   });
 
@@ -30,56 +34,101 @@ export const connectWebsocket = (onConnected, accessToken) => {
 };
 
 const isReady = () => {
+
   if (!stompClient || !stompClient.connected) {
     console.warn("⚠️ WebSocket not connected");
     return false;
   }
+
   return true;
 };
 
-
 export const subscribeToChatMessages = (chatId, cb) => {
+
   if (!isReady()) return;
 
-  return stompClient.subscribe(`/topic/chat/${chatId}`, (msg) => {
-    cb(JSON.parse(msg.body));
-  });
+  return stompClient.subscribe(
+    `/topic/chat/${chatId}`,
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
 };
 
 export const subscribeToChat = (cb) => {
+
   if (!isReady()) return;
 
-  return stompClient.subscribe("/user/queue/chats", (msg) => {
-    cb(JSON.parse(msg.body));
-  });
+  return stompClient.subscribe(
+    "/user/queue/chats",
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
 };
 
 export const subscribeToMessageStatusUpdates = (cb) => {
+
   if (!isReady()) return;
 
-  return stompClient.subscribe("/user/queue/status", (msg) => {
-    cb(JSON.parse(msg.body));
-  });
+  return stompClient.subscribe(
+    "/user/queue/status",
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
 };
 
 export const subscribeToMessageRefreshUpdate = (cb) => {
+
   if (!isReady()) return;
 
-  return stompClient.subscribe("/user/queue/refresh", (msg) => {
-    cb(JSON.parse(msg.body));
-  });
+  return stompClient.subscribe(
+    "/user/queue/refresh",
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
 };
 
 export const subscribeToMessageSeenUpdate = (cb) => {
+
   if (!isReady()) return;
 
-  return stompClient.subscribe("/user/queue/seen", (msg) => {
-    cb(JSON.parse(msg.body));
-  });
+  return stompClient.subscribe(
+    "/user/queue/seen",
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
 };
 
+export const subscribeToPresence = (cb) => {
+
+  if (!isReady()) return;
+
+  return stompClient.subscribe(
+    "/topic/presence",
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
+};
+
+export const subscribeToTypingIndicator = (chatId, cb) => {
+
+  if (!isReady()) return;
+
+  return stompClient.subscribe(
+    `/topic/chat/${chatId}/typing`,
+    (msg) => {
+      cb(JSON.parse(msg.body));
+    }
+  );
+};
 
 export const sendMessageToUser = (data) => {
+
   if (!isReady()) return;
 
   stompClient.publish({
@@ -89,6 +138,7 @@ export const sendMessageToUser = (data) => {
 };
 
 export const sendOpenChatStatus = (chatId) => {
+
   if (!isReady()) return;
 
   stompClient.publish({
@@ -97,29 +147,39 @@ export const sendOpenChatStatus = (chatId) => {
   });
 };
 
-export const sendCloseChatStatus = () => {
+export const sendCloseChatStatus = (chatId) => {
+
   if (!isReady()) return;
 
   stompClient.publish({
     destination: "/app/chat.close",
-    body: "", 
+    body: JSON.stringify({ chatId }),
   });
 };
 
+export const sendTypingIndicator = (chatId, typing) => {
 
-export const connectToOnlineStatus = (onPresenceUpdate) => {
   if (!isReady()) return;
 
-  stompClient.subscribe("/app/topic/presence",(msg) => {
-      const body = JSON.parse(msg.body);
-      onPresenceUpdate(body);
-  })
-}
+  stompClient.publish({
+    destination: "/app/chat.typing",
 
+    body: JSON.stringify({
+      chatId,
+      typing,
+    }),
+  });
+};
 
-export const disconnectWebsocket = () => {
+export const disconnectWebsocket = async () => {
+
   if (stompClient) {
-    stompClient.deactivate();
+
+    await stompClient.deactivate();
+
     stompClient = null;
+
+    console.log("❌ WebSocket Disconnected");
   }
 };
+

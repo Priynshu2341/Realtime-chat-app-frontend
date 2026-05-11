@@ -1,3 +1,4 @@
+
 import { Check, CheckCheck } from "lucide-react";
 import "../../styles/chat-page.css";
 
@@ -11,27 +12,40 @@ export function ChatUI({
   onChangeMessage,
   currentUserId,
   chatRef,
-  messagesEndRef
+  messagesEndRef,
+  isTyping
 }) {
 
   const isMine = (msg) =>
     Number(msg.senderId) === Number(currentUserId);
 
   const renderStatus = (msg) => {
+
     if (!isMine(msg)) return null;
 
     switch (msg.messageStatus) {
+
       case "SENT":
-        return <Check size={16} />;
+        return (
+          <Check
+            size={16}
+            className="message-status-icon"
+          />
+        );
 
       case "DELIVERED":
-        return <CheckCheck size={16} />;
+        return (
+          <CheckCheck
+            size={16}
+            className="message-status-icon"
+          />
+        );
 
       case "READ":
         return (
-          <CheckCheck className="read-icon"
+          <CheckCheck
             size={16}
-            style={{ color: "#FFD700" }} // ✅ FIX
+            className="read-icon"
           />
         );
 
@@ -45,24 +59,49 @@ export function ChatUI({
 
       {/* SIDEBAR */}
       <div className="chat-sidebar">
+
         {chats.map(chat => (
+
           <div
             key={chat.chatId}
             className={`chat-item ${
-              selectedChat?.chatId === chat.chatId ? "active" : ""
+              selectedChat?.chatId === chat.chatId
+                ? "active"
+                : ""
             }`}
             onClick={() => onSelectChat(chat)}
           >
+
             <div className="chat-info">
+
               <div className="main-info">
-                <h4>{chat.otherUserName}</h4>
-                
+
+                <div className="user-title-wrapper">
+
+                  <h4 className="chat-name">
+                    {chat.otherUserName}
+                  </h4>
+
+                  <span
+                    className={
+                      chat.isOtherUserOnline
+                        ? "online-dot"
+                        : "offline-dot"
+                    }
+                  />
+                </div>
+
                 {chat.unread > 0 && (
-                  <span className="badge">{chat.unread}</span>
+                  <span className="badge">
+                    {chat.unread}
+                  </span>
                 )}
               </div>
 
-              <p className="last-msg">{chat.lastMessage}</p>
+              <p className="last-msg">
+                {chat.lastMessage}
+              </p>
+
             </div>
           </div>
         ))}
@@ -72,49 +111,107 @@ export function ChatUI({
       <div className="chat-main">
 
         {!selectedChat ? (
+
           <div className="empty-chat">
             Select a chat to start messaging
           </div>
+
         ) : (
           <>
+
             {/* HEADER */}
             <div className="chat-main-header">
-              <h3>{selectedChat.otherUserName}</h3>
+
+              <div className="header-user-info">
+
+                <h3 className="chat-username">
+                  {selectedChat.otherUserName}
+                </h3>
+
+                <p className="online-status">
+
+                  {selectedChat.isOtherUserOnline
+                    ? "Online"
+                    : "Offline"}
+
+                </p>
+
+              </div>
             </div>
 
             {/* MESSAGES */}
-            <div className="chat-messages" ref={chatRef}>
+            <div
+              className="chat-messages"
+              ref={chatRef}
+            >
+
               {messages.map(msg => (
+
                 <div
-                  key={`${msg.id}-${msg.messageStatus}`}
+                  key={msg.id}
                   className={`message ${
-                    isMine(msg) ? "sent" : "received"
+                    isMine(msg)
+                      ? "sent"
+                      : "received"
                   }`}
                 >
+
                   <div className="message-content">
-                    <span>{msg.content}</span>
-                    {renderStatus(msg)}
+
+                    <span className="message-text">
+                      {msg.content}
+                    </span>
+
+                    <div className="message-meta">
+                      {renderStatus(msg)}
+                    </div>
+
                   </div>
+
                 </div>
               ))}
 
+              {/* TYPING INDICATOR */}
+              {isTyping && (
+
+                <div className="typing-wrapper">
+
+                  <div className="typing-bubble">
+
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+
+                  </div>
+
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
+
             </div>
 
             {/* INPUT */}
             <div className="message-input-div">
+
               <input
                 placeholder="Type a message..."
                 value={newMessage}
-                onChange={(e) => onChangeMessage(e.target.value)}
+                onChange={(e) =>
+                  onChangeMessage(e.target.value)
+                }
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") onSendMessage();
+
+                  if (e.key === "Enter") {
+                    onSendMessage();
+                  }
                 }}
               />
 
               <button onClick={onSendMessage}>
                 Send
               </button>
+
             </div>
           </>
         )}
@@ -122,3 +219,4 @@ export function ChatUI({
     </div>
   );
 }
+
