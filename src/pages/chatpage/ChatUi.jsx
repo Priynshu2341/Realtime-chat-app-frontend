@@ -56,7 +56,7 @@ export function ChatUI({
             <div className="chat-info">
               <div className="main-info">
                 <h4>{chat.otherUserName}</h4>
-
+                
                 {chat.unread > 0 && (
                   <span className="badge">{chat.unread}</span>
                 )}

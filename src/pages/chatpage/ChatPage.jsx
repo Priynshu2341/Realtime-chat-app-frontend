@@ -11,7 +11,8 @@ import {
   subscribeToMessageRefreshUpdate,
   subscribeToMessageSeenUpdate,
   sendOpenChatStatus,
-  sendCloseChatStatus
+  sendCloseChatStatus,
+  connectToOnlineStatus
 } from "../../api/websocket";
 import { ChatUI } from "./ChatUi";
 
@@ -24,6 +25,7 @@ export function ChatPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
+  const [userOnlineData,setUserOnlineData] = useState([]);
 
   const { accessToken, loggedInUserId } = useAuth();
   const navigate = useNavigate();
@@ -32,10 +34,10 @@ export function ChatPage() {
   const messagesEndRef = useRef(null);
   const activeChatRef = useRef(null);
   const seenTimeoutRef = useRef(null);
-  const isLoadingRef = useRef(false); // Prevent duplicate loads
+  const isLoadingRef = useRef(false); 
 
   const currentUserId = Number(loggedInUserId);
-
+  console.log(chats);
  
   useEffect(() => {
     if (!accessToken) {
@@ -43,6 +45,7 @@ export function ChatPage() {
       return;
     }
     connectWebsocket(() => setIsConnected(true), accessToken);
+    connectToOnlineStatus((msg) => setUserOnlineData(msg)  )
   }, [accessToken, navigate]);
 
   
@@ -53,9 +56,7 @@ export function ChatPage() {
     setCursor(res.nextCursor);
     setHasMore(res.hasMore);
 
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 50);
+  
   }, []);
 
  
@@ -146,11 +147,7 @@ export function ChatPage() {
         return [...prev, msg];
       });
 
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 50);
-
-     
+      
       if (activeChatRef.current === selectedChat.chatId) {
         clearTimeout(seenTimeoutRef.current);
         seenTimeoutRef.current = setTimeout(() => {
@@ -222,6 +219,7 @@ export function ChatPage() {
 
         const updated = prev.map(chat => {
           if (chat.chatId !== msg.chatId) return chat;
+          
 
           return {
             ...chat,
@@ -257,11 +255,21 @@ export function ChatPage() {
 
     activeChatRef.current = chat.chatId;
 
+    
+
     setSelectedChat(chat);
     setMessages([]);
     setCursor(null);
     setHasMore(true);
-    isLoadingRef.current = false; // Reset loading flag
+    isLoadingRef.current = false;
+
+   setChats(prev =>
+    prev.map(prevChat =>
+    prevChat.chatId === chat.chatId
+      ? { ...prevChat, unread: 0 }
+      : prevChat
+  )
+);
 
     sendOpenChatStatus(chat.chatId);
     fetchInitialMessages(chat);
@@ -278,6 +286,8 @@ export function ChatPage() {
 
     setNewMessage("");
   };
+
+  
 
   
   return (

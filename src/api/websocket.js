@@ -107,6 +107,15 @@ export const sendCloseChatStatus = () => {
 };
 
 
+export const connectToOnlineStatus = (onPresenceUpdate) => {
+  if (!isReady()) return;
+
+  stompClient.subscribe("/app/topic/presence",(msg) => {
+      const body = JSON.parse(msg.body);
+      onPresenceUpdate(body);
+  })
+}
+
 
 export const disconnectWebsocket = () => {
   if (stompClient) {
