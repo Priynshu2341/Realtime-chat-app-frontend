@@ -82,3 +82,26 @@ export const sendImages = async (file) => {
     return handleError(error, "Failed to upload image");
   }
 };
+
+export const searchUserByEmail = async (email) => {
+  try {
+    const res = await backendApiSecure.get("/users/find", {
+      params: {
+        email: email
+      }
+    });
+
+    return res.data;
+  } catch (e) {
+    return handleError(e, "Failed to find User");
+  }
+};
+
+export const searchAlluser = async () => {
+  try {
+    const res = await backendApiSecure.get("/users/find/all");
+    return res.data;
+  } catch (e) {
+    return handleError(e, "Failed to find User");
+  }
+};

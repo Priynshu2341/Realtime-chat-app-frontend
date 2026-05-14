@@ -425,14 +425,42 @@ export function ChatPage() {
 
   // SELECT CHAT
 
-  const handleSelectChat = (chat) => {
+  const handleSelectChat = async (chat) => {
+    /* MOBILE BACK */
+
+    if (!chat) {
+      if (activeChatRef.current !== null) {
+        sendCloseChatStatus(activeChatRef.current);
+      }
+
+      activeChatRef.current = null;
+
+      setSelectedChat(null);
+
+      setMessages([]);
+
+      setCursor(null);
+
+      setHasMore(true);
+
+      setIsTyping(false);
+
+      return;
+    }
+
+    /* SAME CHAT */
+
     if (selectedChat?.chatId === chat.chatId) {
       return;
     }
 
+    /* CLOSE OLD CHAT */
+
     if (activeChatRef.current !== null) {
       sendCloseChatStatus(activeChatRef.current);
     }
+
+    /* OPEN NEW CHAT */
 
     activeChatRef.current = chat.chatId;
 
@@ -448,6 +476,8 @@ export function ChatPage() {
 
     isLoadingRef.current = false;
 
+    /* RESET UNREAD */
+
     setChats((prev) =>
       prev.map((c) =>
         c.chatId === chat.chatId
@@ -461,7 +491,7 @@ export function ChatPage() {
 
     sendOpenChatStatus(chat.chatId);
 
-    fetchInitialMessages(chat);
+    await fetchInitialMessages(chat);
   };
 
   // SEND MESSAGE

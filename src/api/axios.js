@@ -1,14 +1,14 @@
 import axios from "axios";
 
+const BASE_URL = "http://localhost:8080/api/v1";
+
 export const backendApi = axios.create({
-  baseURL: "http://localhost:8080/api/v1"
+  baseURL: BASE_URL
 });
 
 export const backendApiSecure = axios.create({
-  baseURL: "http://localhost:8080/api/v1"
+  baseURL: BASE_URL
 });
-
-// REQUEST INTERCEPTOR
 
 backendApiSecure.interceptors.request.use(
   (config) => {
@@ -24,35 +24,38 @@ backendApiSecure.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// RESPONSE INTERCEPTOR
-
 backendApiSecure.interceptors.response.use(
   (response) => response,
 
   async (error) => {
     const originalRequest = error.config;
 
-    // TOKEN EXPIRED
+    const status = error.response?.status;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // NO RESPONSE
+    // NETWORK ERROR
+
+    if (!error.response) {
+      return Promise.reject(error);
+    }
+
+    // ACCESS TOKEN EXPIRED
+
+    if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem("refreshToken");
 
         if (!refreshToken) {
-          throw new Error("No refresh token");
+          return Promise.reject(error);
         }
 
-        // REFRESH ACCESS TOKEN
+        // REFRESH TOKEN REQUEST
 
-        const res = await axios.post(
-          "http://localhost:8080/api/v1/auth/refresh",
-
-          {
-            refreshToken
-          }
-        );
+        const res = await axios.post(`${BASE_URL}/auth/refresh`, {
+          refreshToken
+        });
 
         const newAccessToken = res.data.accessToken;
 
@@ -60,25 +63,30 @@ backendApiSecure.interceptors.response.use(
 
         localStorage.setItem("accessToken", newAccessToken);
 
-        // UPDATE FAILED REQUEST
+        // UPDATE REQUEST HEADER
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
-        // RETRY REQUEST
+        // RETRY ORIGINAL REQUEST
 
         return backendApiSecure(originalRequest);
-      } catch (err) {
-        console.error("Refresh token failed", err);
+      } catch (refreshError) {
+        const refreshStatus = refreshError.response?.status;
 
-        // FORCE LOGOUT
+        // ONLY LOGOUT IF
+        // REFRESH TOKEN INVALID
 
-        localStorage.removeItem("accessToken");
+        if (refreshStatus === 401 || refreshStatus === 403) {
+          localStorage.removeItem("accessToken");
 
-        localStorage.removeItem("refreshToken");
+          localStorage.removeItem("refreshToken");
 
-        window.location.href = "/login";
+          localStorage.removeItem("userId");
 
-        return Promise.reject(err);
+          window.location.href = "/login";
+        }
+
+        return Promise.reject(refreshError);
       }
     }
 
