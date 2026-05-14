@@ -1,128 +1,82 @@
-
 import axios from "axios";
 
 export const backendApi = axios.create({
-  baseURL:
-    "http://localhost:8080/api/v1"
+  baseURL: "http://localhost:8080/api/v1"
 });
 
-export const backendApiSecure =
-  axios.create({
-    baseURL:
-      "http://localhost:8080/api/v1"
-  });
+export const backendApiSecure = axios.create({
+  baseURL: "http://localhost:8080/api/v1"
+});
 
 // REQUEST INTERCEPTOR
 
 backendApiSecure.interceptors.request.use(
-
   (config) => {
-
-    const token =
-      localStorage.getItem(
-        "accessToken"
-      );
+    const token = localStorage.getItem("accessToken");
 
     if (token) {
-
-      config.headers.Authorization =
-        `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
   },
 
-  (error) =>
-    Promise.reject(error)
+  (error) => Promise.reject(error)
 );
 
 // RESPONSE INTERCEPTOR
 
 backendApiSecure.interceptors.response.use(
-
   (response) => response,
 
   async (error) => {
-
-    const originalRequest =
-      error.config;
+    const originalRequest = error.config;
 
     // TOKEN EXPIRED
 
-    if (
-      error.response?.status === 401
-      &&
-      !originalRequest._retry
-    ) {
-
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-
-        const refreshToken =
-          localStorage.getItem(
-            "refreshToken"
-          );
+        const refreshToken = localStorage.getItem("refreshToken");
 
         if (!refreshToken) {
-
-          throw new Error(
-            "No refresh token"
-          );
+          throw new Error("No refresh token");
         }
 
         // REFRESH ACCESS TOKEN
 
-        const res =
-          await axios.post(
+        const res = await axios.post(
+          "http://localhost:8080/api/v1/auth/refresh",
 
-            "http://localhost:8080/api/v1/auth/refresh",
+          {
+            refreshToken
+          }
+        );
 
-            {
-              refreshToken
-            }
-          );
-
-        const newAccessToken =
-          res.data.accessToken;
+        const newAccessToken = res.data.accessToken;
 
         // SAVE NEW TOKEN
 
-        localStorage.setItem(
-          "accessToken",
-          newAccessToken
-        );
+        localStorage.setItem("accessToken", newAccessToken);
 
         // UPDATE FAILED REQUEST
 
-        originalRequest.headers.Authorization =
-          `Bearer ${newAccessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
         // RETRY REQUEST
 
-        return backendApiSecure(
-          originalRequest
-        );
-
+        return backendApiSecure(originalRequest);
       } catch (err) {
-
-        console.error(
-          "Refresh token failed",
-          err
-        );
+        console.error("Refresh token failed", err);
 
         // FORCE LOGOUT
 
-        localStorage.removeItem(
-          "accessToken"
-        );
+        localStorage.removeItem("accessToken");
 
-        localStorage.removeItem(
-          "refreshToken"
-        );
+        localStorage.removeItem("refreshToken");
 
-        window.location.href =
-          "/login";
+        window.location.href = "/login";
 
         return Promise.reject(err);
       }
@@ -131,4 +85,3 @@ backendApiSecure.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-

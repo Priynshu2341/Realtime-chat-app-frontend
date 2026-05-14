@@ -11,13 +11,14 @@ export function AuthProvider({ children }) {
     localStorage.getItem("refreshToken")
   );
 
-  const [loggedInUserId,setLoggedInUserId] = useState(() => 
-    localStorage.getItem("userId"));
+  const [loggedInUserId, setLoggedInUserId] = useState(() =>
+    localStorage.getItem("userId")
+  );
 
   const login = (access, refresh, userId) => {
     localStorage.setItem("accessToken", access);
     localStorage.setItem("refreshToken", refresh);
-    localStorage.setItem("userId",userId)
+    localStorage.setItem("userId", userId);
 
     setAccessToken(access);
     setRefreshToken(refresh);
@@ -43,7 +44,6 @@ export function AuthProvider({ children }) {
         refreshToken,
         login,
         logout
-        
       }}
     >
       {children}

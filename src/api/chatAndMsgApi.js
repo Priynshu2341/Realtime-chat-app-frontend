@@ -7,13 +7,13 @@ const handleError = (error, defaultMessage) => {
     return {
       success: false,
       message: error.response.data?.message || defaultMessage,
-      status: error.response.status,
+      status: error.response.status
     };
   }
 
   return {
     success: false,
-    message: defaultMessage || "Something went wrong",
+    message: defaultMessage || "Something went wrong"
   };
 };
 
@@ -45,7 +45,7 @@ export const sendMessage = async ({ receiverId, content }) => {
   try {
     const res = await backendApiSecure.post("/message/send", {
       receiverId,
-      content,
+      content
     });
 
     return res.data;
@@ -63,7 +63,6 @@ export const markChatAsRead = async ({ chatId }) => {
   }
 };
 
-
 export const markChatAsSeen = async ({ chatId }) => {
   try {
     const res = await backendApiSecure.post(`/message/mark/seen/${chatId}`);
@@ -74,10 +73,12 @@ export const markChatAsSeen = async ({ chatId }) => {
 };
 
 export const sendImages = async (file) => {
-     try  { 
+  try {
     const formData = new FormData();
-      formData.append( "file", file );
-      const res = await backendApiSecure.post( "/uploads/file", formData );
-        return res.data; 
-      } catch (error)  {
-          return handleError( error, "Failed to upload image" ); } };
+    formData.append("file", file);
+    const res = await backendApiSecure.post("/uploads/file", formData);
+    return res.data;
+  } catch (error) {
+    return handleError(error, "Failed to upload image");
+  }
+};

@@ -48,7 +48,7 @@
   margin-bottom: 10px;
   text-align: center;
 }
-.register-btn{
+.register-btn {
   width: 100%;
   padding: 10px;
   background: #ff7a18;
@@ -58,16 +58,14 @@
   font-weight: 600;
   cursor: pointer;
   margin-top: 10px;
-
 }
 
-.homepage-btn{
+.homepage-btn {
   display: block;
   margin-top: 10px;
   margin-left: 66px;
 }
 
-.homepage-btn:hover{
-   cursor: pointer;
+.homepage-btn:hover {
+  cursor: pointer;
 }
-
