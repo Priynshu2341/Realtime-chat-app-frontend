@@ -72,3 +72,12 @@ export const markChatAsSeen = async ({ chatId }) => {
     return handleError(error, "Failed to mark chat as seen");
   }
 };
+
+export const sendImages = async (file) => {
+     try  { 
+    const formData = new FormData();
+      formData.append( "file", file );
+      const res = await backendApiSecure.post( "/uploads/file", formData );
+        return res.data; 
+      } catch (error)  {
+          return handleError( error, "Failed to upload image" ); } };

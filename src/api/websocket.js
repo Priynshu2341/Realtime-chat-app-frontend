@@ -111,6 +111,7 @@ export const subscribeToPresence = (cb) => {
     "/topic/presence",
     (msg) => {
       cb(JSON.parse(msg.body));
+      console.log(msg.body)
     }
   );
 };

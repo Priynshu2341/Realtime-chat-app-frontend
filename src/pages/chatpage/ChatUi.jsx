@@ -13,18 +13,18 @@ export function ChatUI({
   currentUserId,
   chatRef,
   messagesEndRef,
-  isTyping
+  isTyping,
+  previewUrl,
+  onImageSelect,
+  clearSelectedImage
 }) {
-
   const isMine = (msg) =>
     Number(msg.senderId) === Number(currentUserId);
 
   const renderStatus = (msg) => {
-
     if (!isMine(msg)) return null;
 
     switch (msg.messageStatus) {
-
       case "SENT":
         return (
           <Check
@@ -56,12 +56,10 @@ export function ChatUI({
 
   return (
     <div className="chat-page">
-
       {/* SIDEBAR */}
+
       <div className="chat-sidebar">
-
-        {chats.map(chat => (
-
+        {chats.map((chat) => (
           <div
             key={chat.chatId}
             className={`chat-item ${
@@ -71,13 +69,9 @@ export function ChatUI({
             }`}
             onClick={() => onSelectChat(chat)}
           >
-
             <div className="chat-info">
-
               <div className="main-info">
-
                 <div className="user-title-wrapper">
-
                   <h4 className="chat-name">
                     {chat.otherUserName}
                   </h4>
@@ -101,52 +95,43 @@ export function ChatUI({
               <p className="last-msg">
                 {chat.lastMessage}
               </p>
-
             </div>
           </div>
         ))}
       </div>
 
       {/* MAIN */}
+
       <div className="chat-main">
-
         {!selectedChat ? (
-
           <div className="empty-chat">
-            Select a chat to start messaging
+            Select a chat
           </div>
-
         ) : (
           <>
-
             {/* HEADER */}
+
             <div className="chat-main-header">
-
               <div className="header-user-info">
-
                 <h3 className="chat-username">
                   {selectedChat.otherUserName}
                 </h3>
 
                 <p className="online-status">
-
                   {selectedChat.isOtherUserOnline
                     ? "Online"
                     : "Offline"}
-
                 </p>
-
               </div>
             </div>
 
             {/* MESSAGES */}
+
             <div
               className="chat-messages"
               ref={chatRef}
             >
-
-              {messages.map(msg => (
-
+              {messages.map((msg) => (
                 <div
                   key={msg.id}
                   className={`message ${
@@ -155,44 +140,77 @@ export function ChatUI({
                       : "received"
                   }`}
                 >
-
                   <div className="message-content">
+                    {msg.mediaUrl && (
+                      <img
+                        src={`http://localhost:8080${msg.mediaUrl}`}
+                        alt="chat"
+                        className="chat-image"
+                      />
+                    )}
 
-                    <span className="message-text">
-                      {msg.content}
-                    </span>
+                    {msg.content?.trim() && (
+                      <p className="message-text">
+                        {msg.content}
+                      </p>
+                    )}
 
                     <div className="message-meta">
                       {renderStatus(msg)}
                     </div>
-
                   </div>
-
                 </div>
               ))}
 
-              {/* TYPING INDICATOR */}
               {isTyping && (
-
                 <div className="typing-wrapper">
-
                   <div className="typing-bubble">
-
                     <span className="typing-dot"></span>
                     <span className="typing-dot"></span>
                     <span className="typing-dot"></span>
-
                   </div>
-
                 </div>
               )}
 
               <div ref={messagesEndRef} />
-
             </div>
 
+            {/* IMAGE PREVIEW */}
+
+            {previewUrl && (
+              <div className="image-preview-wrapper">
+                <img
+                  src={previewUrl}
+                  alt="preview"
+                  className="image-preview"
+                />
+
+                <button
+                  className="remove-image-btn"
+                  onClick={clearSelectedImage}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* INPUT */}
+
             <div className="message-input-div">
+              <label
+                htmlFor="image-input"
+                className="image-upload-btn"
+              >
+                +
+              </label>
+
+              <input
+                id="image-input"
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={onImageSelect}
+              />
 
               <input
                 placeholder="Type a message..."
@@ -201,7 +219,6 @@ export function ChatUI({
                   onChangeMessage(e.target.value)
                 }
                 onKeyDown={(e) => {
-
                   if (e.key === "Enter") {
                     onSendMessage();
                   }
@@ -211,7 +228,6 @@ export function ChatUI({
               <button onClick={onSendMessage}>
                 Send
               </button>
-
             </div>
           </>
         )}

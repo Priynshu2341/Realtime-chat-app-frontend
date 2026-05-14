@@ -1,4 +1,3 @@
-
 import {
   useEffect,
   useRef,
@@ -8,7 +7,8 @@ import {
 
 import {
   getChats,
-  getMessages
+  getMessages,
+  sendImages
 } from "../../api/chatAndMsgApi";
 
 import { useAuth } from "../../auth/AuthContext";
@@ -35,48 +35,104 @@ import { ChatUI } from "./ChatUi";
 
 export function ChatPage() {
 
-  const [selectedChat, setSelectedChat] = useState(null);
+  const [selectedChat, setSelectedChat] =
+    useState(null);
 
-  const [chats, setChats] = useState([]);
+  const [chats, setChats] =
+    useState([]);
 
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] =
+    useState([]);
 
-  const [cursor, setCursor] = useState(null);
+  const [cursor, setCursor] =
+    useState(null);
 
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] =
+    useState(true);
 
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMore, setLoadingMore] =
+    useState(false);
 
-  const [newMessage, setNewMessage] = useState("");
+  const [newMessage, setNewMessage] =
+    useState("");
 
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] =
+    useState(false);
 
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTyping, setIsTyping] =
+    useState(false);
 
-  const { accessToken, loggedInUserId } = useAuth();
+  const [selectedImage, setSelectedImage] =
+    useState(null);
 
-  const currentUserId = Number(loggedInUserId);
+  const [previewUrl, setPreviewUrl] =
+    useState(null);
 
-  const navigate = useNavigate();
+  const {
+    accessToken,
+    loggedInUserId
+  } = useAuth();
 
-  const chatRef = useRef(null);
+  const currentUserId =
+    Number(loggedInUserId);
 
-  const messagesEndRef = useRef(null);
+  const navigate =
+    useNavigate();
 
-  const activeChatRef = useRef(null);
+  const chatRef =
+    useRef(null);
 
-  const seenTimeoutRef = useRef(null);
+  const messagesEndRef =
+    useRef(null);
 
-  const isLoadingRef = useRef(false);
+  const activeChatRef =
+    useRef(null);
 
-  const typingTimeoutRef = useRef(null);
+  const seenTimeoutRef =
+    useRef(null);
 
-  const isTypingRef = useRef(false);
+  const isLoadingRef =
+    useRef(false);
+
+  const typingTimeoutRef =
+    useRef(null);
+
+  const isTypingRef =
+    useRef(false);
+
+  // IMAGE SELECT
+   console.log(selectedChat)
+
+
+  const handleImageSelect = (e) => {
+
+    const file =
+      e.target.files?.[0];
+
+    if (!file) return;
+
+    setSelectedImage(file);
+
+    setPreviewUrl(
+      URL.createObjectURL(file)
+    );
+  };
+
+  const clearSelectedImage = () => {
+
+    setSelectedImage(null);
+
+    setPreviewUrl(null);
+  };
+
+  // WEBSOCKET CONNECT
 
   useEffect(() => {
 
     if (!accessToken) {
+
       navigate("/login");
+
       return;
     }
 
@@ -91,25 +147,32 @@ export function ChatPage() {
 
   }, [accessToken, navigate]);
 
-  const fetchInitialMessages = useCallback(async (chat) => {
+  // FETCH INITIAL MESSAGES
 
-    const res = await getMessages({
-      chatKey: chat.chatKey
-    });
+  const fetchInitialMessages =
+    useCallback(async (chat) => {
 
-    setMessages(res.content);
+      const res =
+        await getMessages({
+          chatKey: chat.chatKey
+        });
 
-    setCursor(res.nextCursor);
+      setMessages(res.content);
 
-    setHasMore(res.hasMore);
+      setCursor(res.nextCursor);
 
-  }, []);
+      setHasMore(res.hasMore);
+
+    }, []);
+
+  // LOAD CHATS
 
   useEffect(() => {
 
     const loadChats = async () => {
 
-      const data = await getChats();
+      const data =
+        await getChats();
 
       setChats(data);
 
@@ -117,13 +180,18 @@ export function ChatPage() {
 
         const firstChat = data[0];
 
-        activeChatRef.current = firstChat.chatId;
+        activeChatRef.current =
+          firstChat.chatId;
 
         setSelectedChat(firstChat);
 
-        sendOpenChatStatus(firstChat.chatId);
+        sendOpenChatStatus(
+          firstChat.chatId
+        );
 
-        fetchInitialMessages(firstChat);
+        fetchInitialMessages(
+          firstChat
+        );
       }
     };
 
@@ -131,50 +199,56 @@ export function ChatPage() {
 
   }, [fetchInitialMessages]);
 
+  // PRESENCE
+
   useEffect(() => {
 
     if (!isConnected) return;
 
-    const sub = subscribeToPresence((presence) => {
+    const sub =
+      subscribeToPresence(
+        (presence) => {
 
-      setChats(prev =>
-        prev.map(chat => {
+          setChats(prev =>
+            prev.map(chat => {
 
-          if (
-            Number(chat.otherUserId) ===
-            Number(presence.userId)
-          ) {
+              
+              if (
+                chat.otherUserName === presence.email
+              ) {
 
-            return {
-              ...chat,
-              isOtherUserOnline:
-                presence.onlineStatus === "ONLINE"
-            };
-          }
+                return {
+                  ...chat,
+                  isOtherUserOnline:
+                    presence.onlineStatus
+                    === "ONLINE" ? true : false
+                };
+              }
 
-          return chat;
-        })
-      );
+              return chat;
+            })
+          );
 
-      setSelectedChat(prev => {
+          setSelectedChat(prev => {
 
-        if (!prev) return prev;
+            if (!prev) return prev;
 
-        if (
-          Number(prev.otherUserId) ===
-          Number(presence.userId)
-        ) {
+            if (
+              prev.otherUserName === presence.email
+            ) {
 
-          return {
-            ...prev,
-            isOtherUserOnline:
-              presence.onlineStatus === "ONLINE"
-          };
+              return {
+                ...prev,
+                isOtherUserOnline:
+                  presence.onlineStatus
+                  === "ONLINE" ? true : false
+              };
+            }
+
+            return prev;
+          });
         }
-
-        return prev;
-      });
-    });
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -182,32 +256,47 @@ export function ChatPage() {
 
   }, [isConnected]);
 
+  // CHAT MESSAGES
+
   useEffect(() => {
 
-    if (!selectedChat || !isConnected) return;
+    if (
+      !selectedChat ||
+      !isConnected
+    ) return;
 
-    const sub = subscribeToChatMessages(
-      selectedChat.chatId,
-      (msg) => {
+    const sub =
+      subscribeToChatMessages(
+        selectedChat.chatId,
+        (msg) => {
 
-        setMessages(prev => {
+          setMessages(prev => {
 
-          if (prev.some(m => m.id === msg.id)) {
-            return prev;
-          }
+            if (
+              prev.some(
+                m => m.id === msg.id
+              )
+            ) {
+              return prev;
+            }
 
-          return [...prev, msg];
-        });
+            return [...prev, msg];
+          });
 
-        clearTimeout(seenTimeoutRef.current);
+          clearTimeout(
+            seenTimeoutRef.current
+          );
 
-        seenTimeoutRef.current = setTimeout(() => {
+          seenTimeoutRef.current =
+            setTimeout(() => {
 
-          sendOpenChatStatus(selectedChat.chatId);
+              sendOpenChatStatus(
+                selectedChat.chatId
+              );
 
-        }, 100);
-      }
-    );
+            }, 100);
+        }
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -215,25 +304,29 @@ export function ChatPage() {
 
   }, [selectedChat, isConnected]);
 
+  // MESSAGE STATUS
+
   useEffect(() => {
 
     if (!isConnected) return;
 
-    const sub = subscribeToMessageStatusUpdates(
-      (msg) => {
+    const sub =
+      subscribeToMessageStatusUpdates(
+        (msg) => {
 
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === msg.messageId
-              ? {
-                  ...m,
-                  messageStatus: msg.messageStatus
-                }
-              : m
-          )
-        );
-      }
-    );
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === msg.messageId
+                ? {
+                    ...m,
+                    messageStatus:
+                      msg.messageStatus
+                  }
+                : m
+            )
+          );
+        }
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -241,25 +334,29 @@ export function ChatPage() {
 
   }, [isConnected]);
 
+  // DELIVERED
+
   useEffect(() => {
 
     if (!isConnected) return;
 
-    const sub = subscribeToMessageRefreshUpdate(
-      (ids) => {
+    const sub =
+      subscribeToMessageRefreshUpdate(
+        (ids) => {
 
-        setMessages(prev =>
-          prev.map(m =>
-            ids.includes(m.id)
-              ? {
-                  ...m,
-                  messageStatus: "DELIVERED"
-                }
-              : m
-          )
-        );
-      }
-    );
+          setMessages(prev =>
+            prev.map(m =>
+              ids.includes(m.id)
+                ? {
+                    ...m,
+                    messageStatus:
+                      "DELIVERED"
+                  }
+                : m
+            )
+          );
+        }
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -267,25 +364,29 @@ export function ChatPage() {
 
   }, [isConnected]);
 
+  // SEEN
+
   useEffect(() => {
 
     if (!isConnected) return;
 
-    const sub = subscribeToMessageSeenUpdate(
-      (ids) => {
+    const sub =
+      subscribeToMessageSeenUpdate(
+        (ids) => {
 
-        setMessages(prev =>
-          prev.map(m =>
-            ids.includes(m.id)
-              ? {
-                  ...m,
-                  messageStatus: "READ"
-                }
-              : m
-          )
-        );
-      }
-    );
+          setMessages(prev =>
+            prev.map(m =>
+              ids.includes(m.id)
+                ? {
+                    ...m,
+                    messageStatus:
+                      "READ"
+                  }
+                : m
+            )
+          );
+        }
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -293,72 +394,89 @@ export function ChatPage() {
 
   }, [isConnected]);
 
+  // CHAT LIST UPDATES
+
   useEffect(() => {
 
     if (!isConnected) return;
 
-    const sub = subscribeToChat((msg) => {
+    const sub =
+      subscribeToChat((msg) => {
 
-      setChats(prev => {
+        setChats(prev => {
 
-        const isOpen =
-          activeChatRef.current === msg.chatId;
+          const isOpen =
+            activeChatRef.current
+            === msg.chatId;
 
-        const updated = prev.map(chat => {
+          const updated =
+            prev.map(chat => {
 
-          if (chat.chatId !== msg.chatId) {
-            return chat;
+              if (
+                chat.chatId !==
+                msg.chatId
+              ) {
+                return chat;
+              }
+
+              return {
+                ...chat,
+                lastMessage:
+                  msg.content ||
+                  "📷 Image",
+
+                unread: isOpen
+                  ? 0
+                  : (chat.unread || 0) + 1
+              };
+            });
+
+          const target =
+            updated.find(
+              c => c.chatId === msg.chatId
+            );
+
+          const rest =
+            updated.filter(
+              c => c.chatId !== msg.chatId
+            );
+
+          return target
+            ? [target, ...rest]
+            : prev;
+        });
+      });
+
+    return () => {
+      sub?.unsubscribe();
+    };
+
+  }, [isConnected]);
+
+  // TYPING
+
+  useEffect(() => {
+
+    if (
+      !selectedChat ||
+      !isConnected
+    ) return;
+
+    const sub =
+      subscribeToTypingIndicator(
+        selectedChat.chatId,
+        (data) => {
+
+          if (
+            Number(data.senderId) ===
+            Number(currentUserId)
+          ) {
+            return;
           }
 
-          return {
-            ...chat,
-            lastMessage: msg.content,
-            unread: isOpen
-              ? 0
-              : (chat.unread || 0) + 1
-          };
-        });
-
-        const target = updated.find(
-          c => c.chatId === msg.chatId
-        );
-
-        const rest = updated.filter(
-          c => c.chatId !== msg.chatId
-        );
-
-        return target
-          ? [target, ...rest]
-          : prev;
-      });
-    });
-
-    return () => {
-      sub?.unsubscribe();
-    };
-
-  }, [isConnected]);
-
-  useEffect(() => {
-
-    if (!selectedChat || !isConnected) return;
-
-    const currentChatId = selectedChat.chatId;
-
-    const sub = subscribeToTypingIndicator(
-      currentChatId,
-      (data) => {
-
-        if (
-          Number(data.senderId) ===
-          Number(currentUserId)
-        ) {
-          return;
+          setIsTyping(data.typing);
         }
-
-        setIsTyping(data.typing);
-      }
-    );
+      );
 
     return () => {
       sub?.unsubscribe();
@@ -370,99 +488,129 @@ export function ChatPage() {
     currentUserId
   ]);
 
+  // AUTO SCROLL
+
   useEffect(() => {
 
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth"
-    });
+    messagesEndRef.current
+      ?.scrollIntoView({
+        behavior: "smooth"
+      });
 
   }, [messages, isTyping]);
+
+  // CLEANUP
 
   useEffect(() => {
 
     return () => {
 
-      clearTimeout(seenTimeoutRef.current);
+      clearTimeout(
+        seenTimeoutRef.current
+      );
 
-      clearTimeout(typingTimeoutRef.current);
+      clearTimeout(
+        typingTimeoutRef.current
+      );
     };
 
   }, []);
 
-  const loadMoreMessages = useCallback(async () => {
+  // PAGINATION
 
-    if (
-      !hasMore ||
-      loadingMore ||
-      !cursor ||
-      !selectedChat ||
-      isLoadingRef.current
-    ) {
-      return;
-    }
+  const loadMoreMessages =
+    useCallback(async () => {
 
-    isLoadingRef.current = true;
+      if (
+        !hasMore ||
+        loadingMore ||
+        !cursor ||
+        !selectedChat ||
+        isLoadingRef.current
+      ) {
+        return;
+      }
 
-    setLoadingMore(true);
+      isLoadingRef.current = true;
 
-    const container = chatRef.current;
+      setLoadingMore(true);
 
-    if (!container) {
+      const container =
+        chatRef.current;
 
-      isLoadingRef.current = false;
+      if (!container) {
 
-      setLoadingMore(false);
+        isLoadingRef.current = false;
 
-      return;
-    }
+        setLoadingMore(false);
 
-    const prevHeight = container.scrollHeight;
+        return;
+      }
 
-    const prevTop = container.scrollTop;
+      const prevHeight =
+        container.scrollHeight;
 
-    try {
+      const prevTop =
+        container.scrollTop;
 
-      const res = await getMessages({
-        chatKey: selectedChat.chatKey,
-        cursorTime: cursor.createdAt,
-        cursorId: cursor.id
-      });
+      try {
 
-      setMessages(prev => [
-        ...res.content,
-        ...prev
-      ]);
+        const res =
+          await getMessages({
+            chatKey:
+              selectedChat.chatKey,
 
-      setCursor(res.nextCursor);
+            cursorTime:
+              cursor.createdAt,
 
-      setHasMore(res.hasMore);
+            cursorId:
+              cursor.id
+          });
 
-      requestAnimationFrame(() => {
+        setMessages(prev => [
+          ...res.content,
+          ...prev
+        ]);
 
-        const newHeight =
-          container.scrollHeight;
+        setCursor(
+          res.nextCursor
+        );
 
-        container.scrollTop =
-          prevTop + (newHeight - prevHeight);
-      });
+        setHasMore(
+          res.hasMore
+        );
 
-    } finally {
+        requestAnimationFrame(() => {
 
-      isLoadingRef.current = false;
+          const newHeight =
+            container.scrollHeight;
 
-      setLoadingMore(false);
-    }
+          container.scrollTop =
+            prevTop +
+            (newHeight - prevHeight);
+        });
 
-  }, [
-    hasMore,
-    loadingMore,
-    cursor,
-    selectedChat
-  ]);
+      } finally {
+
+        isLoadingRef.current =
+          false;
+
+        setLoadingMore(false);
+      }
+
+    }, [
+      hasMore,
+      loadingMore,
+      cursor,
+      selectedChat
+    ]);
+
+  // SCROLL LISTENER
 
   useEffect(() => {
 
-    const container = chatRef.current;
+    const container =
+      chatRef.current;
 
     if (!container) return;
 
@@ -491,108 +639,176 @@ export function ChatPage() {
 
   }, [loadMoreMessages]);
 
-  const handleSelectChat = (chat) => {
+  // SELECT CHAT
 
-    if (
-      selectedChat?.chatId === chat.chatId
-    ) {
-      return;
-    }
+  const handleSelectChat =
+    (chat) => {
 
-    if (activeChatRef.current !== null) {
+      if (
+        selectedChat?.chatId ===
+        chat.chatId
+      ) {
+        return;
+      }
 
-      sendCloseChatStatus(
-        activeChatRef.current
+      if (
+        activeChatRef.current !== null
+      ) {
+
+        sendCloseChatStatus(
+          activeChatRef.current
+        );
+      }
+
+      activeChatRef.current =
+        chat.chatId;
+
+      setSelectedChat(chat);
+
+      setMessages([]);
+
+      setCursor(null);
+
+      setHasMore(true);
+
+      setIsTyping(false);
+
+      isLoadingRef.current =
+        false;
+
+      setChats(prev =>
+        prev.map(c =>
+          c.chatId === chat.chatId
+            ? {
+                ...c,
+                unread: 0
+              }
+            : c
+        )
       );
-    }
 
-    activeChatRef.current = chat.chatId;
-
-    setSelectedChat(chat);
-
-    setMessages([]);
-
-    setCursor(null);
-
-    setHasMore(true);
-
-    isLoadingRef.current = false;
-
-    setChats(prev =>
-      prev.map(c =>
-        c.chatId === chat.chatId
-          ? { ...c, unread: 0 }
-          : c
-      )
-    );
-
-    sendOpenChatStatus(chat.chatId);
-
-    fetchInitialMessages(chat);
-  };
-
-  const handleSendMessage = () => {
-
-    if (
-      !newMessage.trim() ||
-      !selectedChat
-    ) {
-      return;
-    }
-
-    sendMessageToUser({
-      receiverId: selectedChat.otherUserId,
-      content: newMessage.trim(),
-    });
-
-    setNewMessage("");
-
-    isTypingRef.current = false;
-
-    sendTypingIndicator(
-      selectedChat.chatId,
-      false
-    );
-  };
-
-  const handleMessageChange = (value) => {
-
-    setNewMessage(value);
-
-    if (!selectedChat) return;
-
-    if (!isTypingRef.current) {
-
-      isTypingRef.current = true;
-
-      sendTypingIndicator(
-        selectedChat.chatId,
-        true
+      sendOpenChatStatus(
+        chat.chatId
       );
-    }
 
-    clearTimeout(
-      typingTimeoutRef.current
-    );
+      fetchInitialMessages(chat);
+    };
 
-    const currentChatId =
-      selectedChat.chatId;
+  // SEND MESSAGE
 
-    typingTimeoutRef.current =
-      setTimeout(() => {
+  const handleSendMessage =
+    async () => {
 
-        isTypingRef.current = false;
+      if (
+        !newMessage.trim()
+        &&
+        !selectedImage
+      ) {
+        return;
+      }
+
+      try {
+
+        let mediaUrl = null;
+
+        // UPLOAD IMAGE
+
+        if (selectedImage) {
+
+          const uploadRes =
+            await sendImages(
+              selectedImage
+            );
+
+          mediaUrl =
+            uploadRes.mediaUrl;
+        }
+
+        // SEND MESSAGE
+
+        sendMessageToUser({
+
+          receiverId:
+            selectedChat.otherUserId,
+
+          content:
+            newMessage.trim(),
+
+          mediaUrl,
+
+          messageType:
+            mediaUrl
+              ? "IMAGE"
+              : "TEXT"
+        });
+
+        // RESET
+
+        setNewMessage("");
+
+        clearSelectedImage();
+
+        isTypingRef.current =
+          false;
 
         sendTypingIndicator(
-          currentChatId,
+          selectedChat.chatId,
           false
         );
 
-      }, 1500);
-  };
+      } catch (e) {
+
+        console.error(
+          "Failed to send message",
+          e
+        );
+      }
+    };
+
+  // MESSAGE INPUT
+
+  const handleMessageChange =
+    (value) => {
+
+      setNewMessage(value);
+
+      if (!selectedChat) return;
+
+      if (!isTypingRef.current) {
+
+        isTypingRef.current = true;
+
+        sendTypingIndicator(
+          selectedChat.chatId,
+          true
+        );
+      }
+
+      clearTimeout(
+        typingTimeoutRef.current
+      );
+
+      const currentChatId =
+        selectedChat.chatId;
+
+      typingTimeoutRef.current =
+        setTimeout(() => {
+
+          isTypingRef.current =
+            false;
+
+          sendTypingIndicator(
+            currentChatId,
+            false
+          );
+
+        }, 1500);
+    };
 
   return (
+
     <ChatUI
+
       chats={chats}
       selectedChat={selectedChat}
       messages={messages}
@@ -600,11 +816,22 @@ export function ChatPage() {
       currentUserId={currentUserId}
       chatRef={chatRef}
       messagesEndRef={messagesEndRef}
-      onSelectChat={handleSelectChat}
-      onSendMessage={handleSendMessage}
-      onChangeMessage={handleMessageChange}
+      onSelectChat={ handleSelectChat }
+      onSendMessage={ handleSendMessage }
+      onChangeMessage={
+        handleMessageChange
+      }
       isTyping={isTyping}
+      selectedImage={
+        selectedImage
+      }
+      previewUrl={previewUrl}
+      onImageSelect={
+        handleImageSelect
+      }
+      clearSelectedImage={
+        clearSelectedImage
+      }
     />
   );
 }
-
